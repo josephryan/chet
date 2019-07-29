@@ -1,0 +1,228 @@
+#!perl
+
+use strict;
+use warnings;
+use Data::Dumper;
+use Getopt::Long;
+use Pod::Usage;
+use JFR::Fasta;
+use Cwd;
+
+our $VERSION = 0.05;
+
+MAIN: {
+    my $rh_opts   = process_options();
+    my $rh_seqs1  = get_seqs($rh_opts->{'fasta'},$rh_opts->{'cl1'});
+    my $rh_seqs2  = get_seqs($rh_opts->{'fasta'},$rh_opts->{'cl2'});
+    my $rh_freqs1 = get_freqs($rh_seqs1);
+    my $rh_freqs2 = get_freqs($rh_seqs2);
+    my $comphet   = get_comphet($rh_freqs1,$rh_freqs2);
+    print "chet v. $VERSION\nCOMPHET = $comphet\n";
+}
+
+sub get_comphet {
+    my $rh_1 = shift;
+    my $rh_2 = shift;
+    my $subindex = 0;
+    foreach my $aa (keys %{$rh_1}) {
+        $rh_1->{$aa} = $rh_1->{$aa} || 0;
+        $rh_2->{$aa} = $rh_2->{$aa} || 0;
+        my $diff = $rh_1->{$aa} - $rh_2->{$aa};
+        $diff *= -1 if ($diff < 0);
+        $subindex += $diff;
+    }
+    return $subindex;
+}
+
+sub get_freqs {
+    my $rh_s     = shift;
+    my %freqs    = ();
+    my %aa_count = ();
+    my $count    = 0;
+    foreach my $id (keys %{$rh_s}) {
+        my @aas = split /|/, $rh_s->{$id};
+        foreach my $aa (@aas) {
+            $count++;
+            $aa_count{uc($aa)}++;
+        }
+    }
+    foreach my $aa (keys %aa_count) {
+        $freqs{$aa} = $aa_count{$aa} / $count;
+    }
+    return \%freqs;
+}
+
+sub get_seqs {
+    my $fa    = shift;
+    my $ra_cl = shift;
+    my %ids   = ();
+    my %seqs  = ();
+    foreach my $id (@{$ra_cl}) {
+        die "$id appears in --clade1 and/or --clade2 more than once\n" if ($ids{$id});
+        $ids{$id}++;
+    }
+    my $fp = JFR::Fasta->new($fa);
+    while (my $rec = $fp->get_record()) {
+        my $fa_id = JFR::Fasta->get_def_w_o_gt($rec->{'def'});
+        next unless $ids{$fa_id};
+        $seqs{$fa_id} = $rec->{'seq'};
+    }
+    return \%seqs;
+}
+
+sub get_comphets {
+    my $rh_freqs = shift;
+    my %comphets = ();
+    foreach my $k (keys %{$rh_freqs}) {
+        $comphets{$k} = JFR::CompHet::get_indiv_comphet($rh_freqs->{$k});
+    }
+    return \%comphets;
+}
+
+sub get_start_freqs{
+    my $f = shift;
+    my %rh_f = ();
+    my @first10 = @JFR::CompHet::CHANG_FREQ[0..9];
+    my @last10 = @JFR::CompHet::CHANG_FREQ[10..19];
+        for (my $i = 0; $i < @first10; $i++){
+            if ($first10[$i] >= $last10[$i]){
+                # round so p4 doesn't croak w >3 digits after decimal point
+                my $val = sprintf("%.3f",($last10[$i]*$f));
+                push @{$rh_f{$f}}, $last10[$i] += $val;
+                push @{$rh_f{$f}},$first10[$i] -= $val;
+            } else {
+                my $val = sprintf("%.3f",($first10[$i]*$f));
+                push @{$rh_f{$f}}, $last10[$i] += $val;
+                push @{$rh_f{$f}}, $first10[$i] -= $val;
+            }
+        }    
+    return \%rh_f;
+}
+
+sub lemon {
+    print qq~Chester Earl Lemon (born February 12, 1955) is a former Major League Baseball outfielder.
+
+A native of Jackson, Mississippi, he grew up in Los Angeles. He was drafted in the first round of the 1972 Major League Baseball draft and played 16 seasons in Major League Baseball for the Chicago White Sox from 1975 to 1981 and for the Detroit Tigers from 1982 to 1990. He was selected as an American League All-Star in 1978, 1979, and 1984 and was the starting center fielder for the 1984 Detroit Tigers team that won the 1984 World Series.
+
+     _        ____                                       __
+    / \     .'    '.        ____......------""""""""`````  `\
+   |   `::-/'-....-'\--""```                                 |
+   |    :: |        |                                        |
+   |   ,:'-\.-''''-./--..___                                /
+    \_/     '.____.'        ````````````"""""""------------'
+
+~;
+exit;
+}
+
+sub usage {
+    print "$0 --fasta=FASTA_ALN --clade1=CSV_OF_GROUP1 --clade2=CSV_OF_GROUP2 [--version] [--help]\n";
+    exit;
+}
+
+sub process_options {
+    my $rh_opts = {};
+
+    my $opt_results = Getopt::Long::GetOptions(
+                          "fasta=s" => \$rh_opts->{'fasta'},
+                            "lemon" => \$rh_opts->{'lemon'},
+                         "clade1=s" => \$rh_opts->{'clade1'},
+                         "clade2=s" => \$rh_opts->{'clade2'},
+                             "help" => \$rh_opts->{'help'},
+                          "version" => \$rh_opts->{'version'},
+                      );
+    die "chet v. $VERSION\n" if ($rh_opts->{'version'});
+    pod2usage({-exitval => 0, -verbose => 2}) if($rh_opts->{'help'});
+    lemon() if ($rh_opts->{'lemon'});
+    usage() unless ($rh_opts->{'fasta'});
+    usage() unless ($rh_opts->{'clade1'});
+    usage() unless ($rh_opts->{'clade1'});
+    $rh_opts->{'cl1'} = [ split /,/, $rh_opts->{'clade1'} ];
+    $rh_opts->{'cl2'} = [ split /,/, $rh_opts->{'clade2'} ];
+    return $rh_opts;
+}
+
+__END__
+
+=head1 NAME
+
+B<chet> - Produce an index of compositional heterogeneity for 2 clades
+
+=head1 AUTHOR
+
+Joseph F. Ryan <joseph.ryan@whitney.ufl.edu>
+
+=head1 SYNOPSIS
+
+chet --fasta=FASTA_ALN --clade1=CSV_OF_GROUP1 --clade2=CSV_OF_GROUP2 [--version] [--help]
+
+=head1 OPTIONS
+
+=over
+
+=item B<--fasta>
+
+fasta formatted sequence file (usually aligned)
+
+=item B<--clade1>
+
+comma separated list of taxa in one of the clades to be compared
+
+=item B<--clade2>
+
+comma separated list of taxa in the other clade to be compared
+
+=item B<--help>
+
+Print this manual
+
+=item B<--version>
+
+Print the version. Overrides all other options.
+
+=back
+
+=head1 DESCRIPTION
+
+This program produces an index representing the level of compositional heterogeneity between two clades. The index is the sum of differences between average percentages for each amino acid or nucleotide tested.
+
+=head1 EXAMPLE OF USAGE
+
+You have a tree that looks like this:
+
+((((A1,(A2,A3)),(A4,A5)),((B1,(B2,B3)),(B4,B5))),(((C1,(C2,C3)),(C4,C5)),((D1,(D2,D3)),(D4,D5))))
+
+You suspect that the A and B clades are being pulled together because of comphet and that A and C should be a clade. Run the following:
+
+`chet --fasta=ABCD.fa --clade1=A1,A2,A3,A4,A5 --clade2=C1,C2,C3,C4,C5`
+
+then run:
+
+`chet --fasta=ABCD.fa --clade1=A1,A2,A3,A4,A5 --clade2=B1,B2,B3,B4,B5`
+
+If your hypothesis is correct, the first cmd should produce a larger number than the second cmd. 
+
+To get a p-value first subtract the comphet of the AB comparison from the comphet of the AC comparison; this is the comphet diff test-statistic. Next, simulate a large number of datasests (~10,000) on the ABCD tree (producing a matrix of the same dimensions). Run the chet commands above on each of these datasets, and compute a comphet diff for each dataset. Count how many of your simulated comphet diffs are greater than your comphet diff test-statistic. The p-value is this count divided by the number of simulations.
+
+=head1 BUGS
+
+Please report them to Joseph Ryan <joseph.ryan@whitney.ufl.edu>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2018,2019 Joseph F. Ryan
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+=cut
