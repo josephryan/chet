@@ -26,14 +26,12 @@ To install type the following:
 
    perl Makefile.PL
    make
-   make test
    make install
    
 To install without root privelages try:
 
    perl Makefile.PL PREFIX=/home/myuser/scripts
    make
-   make test
    make install
 
 HELP
