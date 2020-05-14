@@ -79,26 +79,6 @@ sub get_comphets {
     return \%comphets;
 }
 
-sub get_start_freqs{
-    my $f = shift;
-    my %rh_f = ();
-    my @first10 = @JFR::CompHet::CHANG_FREQ[0..9];
-    my @last10 = @JFR::CompHet::CHANG_FREQ[10..19];
-        for (my $i = 0; $i < @first10; $i++){
-            if ($first10[$i] >= $last10[$i]){
-                # round so p4 doesn't croak w >3 digits after decimal point
-                my $val = sprintf("%.3f",($last10[$i]*$f));
-                push @{$rh_f{$f}}, $last10[$i] += $val;
-                push @{$rh_f{$f}},$first10[$i] -= $val;
-            } else {
-                my $val = sprintf("%.3f",($first10[$i]*$f));
-                push @{$rh_f{$f}}, $last10[$i] += $val;
-                push @{$rh_f{$f}}, $first10[$i] -= $val;
-            }
-        }    
-    return \%rh_f;
-}
-
 sub lemon {
     print qq~Chester Earl Lemon (born February 12, 1955) is a former Major League Baseball outfielder.
 
